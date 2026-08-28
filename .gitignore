@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+config.json
+tts.mp3
+node_modules/
+dist/
+.idea/
