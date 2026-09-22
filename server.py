@@ -1,11 +1,10 @@
-import base64
 import os
-import threading
 
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
-import botmanager
+import audiomanager
+import playback_output
 import config as cfgmodule
 import state
 
@@ -15,18 +14,13 @@ DASHBOARD_DIST = os.path.join(
 
 app = Flask(__name__)
 
-# This API controls a real Discord bot (and /config hands back its raw
-# token) — it must never be reachable from anything but this machine's own
-# browser. Bind to loopback only (see run(), below) and only allow the
-# origins the dashboard is actually served from: itself (same-origin, no
-# CORS needed, but harmless to list) and the Vite dev server.
+# Local dashboard and Vite development origins only.
 ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
 CORS(app, origins=ALLOWED_ORIGINS)
 
-INVITE_PERMISSIONS = 3146752  # View Channel + Connect + Speak
 
 
 # ---------------- dashboard (built single-file UI) ----------------
@@ -45,46 +39,54 @@ def dashboard():
 _voices_cache = None
 
 
-def _client_id_from_token(token: str):
-    """A bot token's first '.'-segment is the base64 of its own user id,
-    which is the same id Discord uses as the OAuth2 client_id for invite
-    links — so we can build the invite link from just the token."""
-    try:
-        first = token.split(".")[0]
-        padded = first + "=" * (-len(first) % 4)
-        decoded = base64.urlsafe_b64decode(padded).decode("ascii")
-        return decoded if decoded.isdigit() else None
-    except Exception:
-        return None
-
-
 # ---------------- TTS control ----------------
 @app.get("/status")
 def status():
+    cfg = cfgmodule.load()
+    device_error = ""
+    try:
+        name = playback_output.validate_device(cfg["output_device_id"])
+    except Exception as exc:
+        name = cfg["output_device_name"]
+        device_error = str(exc)
+    if not device_error and cfg["output_device_id"] == playback_output.SOUNDPAD_ID and cfg["monitor_enabled"]:
+        try:
+            playback_output.validate_monitor(cfg["monitor_device_id"])
+        except Exception as exc:
+            device_error = str(exc)
     with state.lock:
         return jsonify({
-            "botStatus": "online" if state.bot_ready else "offline",
-            "botUsername": state.bot_username,
-            "voiceStatus": "connected" if state.voice_connected else "disconnected",
-            "voiceChannelId": state.voice_channel_id,
+            "engineStatus": "online" if state.engine_ready else "offline",
+            "outputStatus": "unavailable" if device_error else "ready",
+            "outputDeviceId": cfg["output_device_id"],
+            "outputDeviceName": name,
+            "playbackStatus": state.playback_status,
+            "activeDeviceId": state.active_device_id,
             "queueSize": len(state.queue),
             "lastMessage": state.last_message,
+            "error": state.last_error or device_error,
+            "errorId": state.error_id,
+            "completedCount": state.completed_count,
         })
 
 
 @app.post("/speak")
 def speak():
     data = request.get_json(silent=True) or {}
-    text = (data.get("text") or "").strip()
+    text = data.get("text", "")
+    if not isinstance(text, str):
+        return jsonify({"ok": False, "error": "text must be a string"}), 400
+    text = text.strip()
 
     if not text:
         return jsonify({"ok": False, "error": "text is required"}), 400
 
-    with state.lock:
-        state.queue.append(text)
-        state.last_message = text
-
-    print("QUEUED:", text)
+    if len(text) > 500:
+        return jsonify({"ok": False, "error": "Maximum message length is 500 characters"}), 400
+    try:
+        audiomanager.enqueue(text)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
 
     return jsonify({"ok": True})
 
@@ -94,7 +96,11 @@ def repeat():
     with state.lock:
         if not state.last_message:
             return jsonify({"ok": False, "error": "nothing to repeat"}), 400
-        state.queue.append(state.last_message)
+        text = state.last_message
+    try:
+        audiomanager.enqueue(text)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
 
     return jsonify({"ok": True})
 
@@ -118,99 +124,76 @@ def set_rate():
 
     rate = max(-50, min(50, rate))
 
+    cfgmodule.save({"tts_rate": rate})
     with state.lock:
         state.rate = rate
 
     return jsonify({"ok": True, "rate": rate})
 
 
-# ---------------- voice channel control (manual override) ----------------
-@app.get("/channels")
-def channels():
-    return jsonify(botmanager.list_voice_channels())
+# ---------------- Windows output / configuration ----------------
+@app.get("/devices")
+def devices():
+    try:
+        return jsonify(playback_output.list_devices())
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 503
 
 
-@app.post("/join")
-def join_channel():
-    data = request.get_json(silent=True) or {}
-    channel_id = data.get("channelId")
-
-    if not channel_id:
-        return jsonify({"ok": False, "error": "channelId is required"}), 400
-
-    ok, err = botmanager.join_channel_sync(str(channel_id))
-    if not ok:
-        return jsonify({"ok": False, "error": err}), 400
-
-    return jsonify({"ok": True})
-
-
-@app.post("/leave")
-def leave_channel():
-    ok, err = botmanager.leave_channel_sync()
-    if not ok:
-        return jsonify({"ok": False, "error": err}), 400
-
-    return jsonify({"ok": True})
-
-
-# ---------------- setup / configuration ----------------
 @app.get("/config")
 def get_config():
     cfg = cfgmodule.load()
-    token = cfg["discord_token"]
-
     return jsonify({
-        "configured": bool(token),
-        "discordToken": token,
-        "targetUserId": cfg["target_user_id"],
+        "configured": bool(cfg["output_device_id"]),
+        "outputDeviceId": cfg["output_device_id"],
+        "outputDeviceName": cfg["output_device_name"],
+        "monitorEnabled": cfg["monitor_enabled"],
+        "monitorDeviceId": cfg["monitor_device_id"],
+        "monitorDeviceName": cfg["monitor_device_name"],
         "ttsVoice": cfg["tts_voice"],
         "ttsRate": cfg["tts_rate"],
-        "inviteUrl": _invite_url(token) if token else None,
     })
 
 
 @app.post("/config")
 def update_config():
     data = request.get_json(silent=True) or {}
-    old_cfg = cfgmodule.load()
     patch = {}
-
-    if "discordToken" in data:
-        patch["discord_token"] = str(data["discordToken"]).strip()
-    if "targetUserId" in data:
-        patch["target_user_id"] = str(data["targetUserId"]).strip()
+    if "outputDeviceId" in data:
+        device_id = data["outputDeviceId"]
+        if not isinstance(device_id, str) or not device_id:
+            return jsonify({"ok": False, "error": "Choose an Output Device"}), 400
+        try:
+            patch["output_device_name"] = playback_output.validate_device(device_id)
+        except Exception as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+        patch["output_device_id"] = device_id
+    if "monitorEnabled" in data:
+        if not isinstance(data["monitorEnabled"], bool):
+            return jsonify({"ok": False, "error": "monitorEnabled must be a boolean"}), 400
+        patch["monitor_enabled"] = data["monitorEnabled"]
+    if "monitorDeviceId" in data:
+        monitor_id = data["monitorDeviceId"]
+        if not isinstance(monitor_id, str) or not monitor_id:
+            return jsonify({"ok": False, "error": "Choose a Local Monitor Device"}), 400
+        try:
+            patch["monitor_device_name"] = playback_output.validate_monitor(monitor_id)
+        except Exception as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+        patch["monitor_device_id"] = monitor_id
     if "ttsVoice" in data:
-        patch["tts_voice"] = str(data["ttsVoice"]).strip()
+        if not isinstance(data["ttsVoice"], str) or not data["ttsVoice"].strip():
+            return jsonify({"ok": False, "error": "ttsVoice is required"}), 400
+        patch["tts_voice"] = data["ttsVoice"].strip()
     if "ttsRate" in data:
         try:
             patch["tts_rate"] = max(-50, min(50, int(data["ttsRate"])))
         except (TypeError, ValueError):
             return jsonify({"ok": False, "error": "ttsRate must be an integer"}), 400
-
     new_cfg = cfgmodule.save(patch)
-
     with state.lock:
-        if "tts_rate" in patch:
-            state.rate = new_cfg["tts_rate"]
-
-    token_changed = "discord_token" in patch and patch["discord_token"] != old_cfg["discord_token"]
-    if token_changed:
-        threading.Thread(
-            target=botmanager.restart_bot, args=(patch["discord_token"],), daemon=True
-        ).start()
-
-    return jsonify({"ok": True, "restarting": token_changed})
-
-
-def _invite_url(token: str):
-    client_id = _client_id_from_token(token)
-    if not client_id:
-        return None
-    return (
-        "https://discord.com/api/oauth2/authorize"
-        f"?client_id={client_id}&scope=bot&permissions={INVITE_PERMISSIONS}"
-    )
+        state.rate = new_cfg["tts_rate"]
+    return jsonify({"ok": True})
 
 
 @app.get("/voices")
@@ -242,7 +225,7 @@ def voices():
 
 def run(port: int = 5000):
     # 127.0.0.1 only — never expose this on the LAN or internet. It has no
-    # authentication and controls a real Discord bot with its raw token.
+    # authentication and controls local audio output.
     app.run(host="127.0.0.1", port=port)
 
 

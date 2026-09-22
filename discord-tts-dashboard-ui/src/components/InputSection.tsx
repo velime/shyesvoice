@@ -173,7 +173,7 @@ export function InputSection({ onSend, isSending, autoSpeak }: Props) {
         ) : (
           <>
             <Send size={15} />
-            Send to Voice Channel
+            Speak
           </>
         )}
       </motion.button>

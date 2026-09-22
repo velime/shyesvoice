@@ -3,11 +3,11 @@ import { Settings } from './icons';
 
 interface Props {
   isOnline: boolean;
-  botUsername?: string;
+  outputName?: string;
   onSettingsClick: () => void;
 }
 
-export function Header({ isOnline, botUsername, onSettingsClick }: Props) {
+export function Header({ isOnline, outputName, onSettingsClick }: Props) {
   return (
     <motion.header
       initial={{ opacity: 0, y: -20 }}
@@ -36,12 +36,12 @@ export function Header({ isOnline, botUsername, onSettingsClick }: Props) {
           )}
         </div>
 
-        <div>
+        <div className="min-w-0">
           <h1 className="text-xl font-bold text-white tracking-tight leading-none">
             TTS Control
           </h1>
-          <p className="text-xs text-white/35 mt-0.5 font-medium">
-            {botUsername || 'Discord Voice Bridge'}
+          <p title={outputName} className="text-xs text-white/35 mt-0.5 font-medium truncate max-w-40 sm:max-w-sm">
+            {outputName || 'Windows Voice Bridge'}
           </p>
         </div>
       </div>
@@ -64,7 +64,7 @@ export function Header({ isOnline, botUsername, onSettingsClick }: Props) {
         <button
           onClick={onSettingsClick}
           className="p-2.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-white/50 hover:text-white transition-colors"
-          title="Bot Setup"
+          title="TTS Settings"
         >
           <Settings size={16} />
         </button>

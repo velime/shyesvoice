@@ -1,4 +1,4 @@
-import { BotConfig, VoiceChannelOption, VoiceOption } from '../types';
+import { TTSConfig, OutputDevice, VoiceOption, SystemStatus } from '../types';
 
 // In dev (`npm run dev`, served on :5173) the API lives on a different
 // origin, so it's addressed explicitly and needs a CORS allowance on the
@@ -69,42 +69,25 @@ export const ttsApi = {
     }),
 
   getStatus: () =>
-    request<{
-      botStatus: 'online' | 'offline';
-      botUsername: string;
-      voiceStatus: 'connected' | 'disconnected';
-      voiceChannelId: string | null;
-      queueSize: number;
-      lastMessage: string;
-    }>('/status', {
+    request<SystemStatus>('/status', {
       method: 'GET',
     }),
 
-  getConfig: () => request<BotConfig>('/config', { method: 'GET' }),
+  getConfig: () => request<TTSConfig>('/config', { method: 'GET' }),
 
   saveConfig: (patch: Partial<{
-    discordToken: string;
-    targetUserId: string;
+    outputDeviceId: string;
+    monitorEnabled: boolean;
+    monitorDeviceId: string;
     ttsVoice: string;
     ttsRate: number;
   }>) =>
-    request<{ ok: boolean; restarting: boolean }>('/config', {
+    request<{ ok: boolean }>('/config', {
       method: 'POST',
       body: JSON.stringify(patch),
     }),
 
   getVoices: () => request<VoiceOption[]>('/voices', { method: 'GET' }),
 
-  getChannels: () => request<VoiceChannelOption[]>('/channels', { method: 'GET' }),
-
-  joinChannel: (channelId: string) =>
-    request('/join', {
-      method: 'POST',
-      body: JSON.stringify({ channelId }),
-    }),
-
-  leaveChannel: () =>
-    request('/leave', {
-      method: 'POST',
-    }),
+  getDevices: () => request<OutputDevice[]>('/devices', { method: 'GET' }),
 };

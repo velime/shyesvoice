@@ -18,7 +18,7 @@ export function useTTS({ onSuccess, onError }: UseTTSOptions) {
       setIsSending(true);
       const result = await ttsApi.speak(text);
       if (result.success) {
-        onSuccess('Message sent to voice channel ✓');
+        onSuccess('Message queued for playback ✓');
       } else {
         onError(`Failed to send: ${result.error ?? 'Unknown error'}`);
       }

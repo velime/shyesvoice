@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { RefreshCw, Trash2, Volume2, Zap } from './icons';
 
 interface Props {
+  initialRate: number;
   onRepeat: () => void;
   onClear: () => void;
   onRateChange: (rate: number) => void;
@@ -14,6 +15,7 @@ interface Props {
 }
 
 export function ControlsPanel({
+  initialRate,
   onRepeat,
   onClear,
   onRateChange,
@@ -23,8 +25,9 @@ export function ControlsPanel({
   isClearing,
   isSettingRate,
 }: Props) {
-  const [rate, setRate] = useState(0);
+  const [rate, setRate] = useState(initialRate);
   const [pendingRate, setPendingRate] = useState(false);
+  useEffect(() => setRate(initialRate), [initialRate]);
 
   useEffect(() => {
     if (!pendingRate) return;

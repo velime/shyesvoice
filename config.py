@@ -1,12 +1,4 @@
-"""Local, user-editable bot configuration.
-
-Settings live in config.json next to this file (never committed — see
-.gitignore) and are readable/writable both from the Flask API (so the
-dashboard's Settings screen can change them) and from the bot manager.
-
-On first run, if no config.json exists yet but a legacy .env is present,
-values are migrated in automatically so nothing is lost.
-"""
+"""Local TTS configuration; voice/rate survive migration from the bot version."""
 import json
 import os
 import threading
@@ -14,8 +6,11 @@ import threading
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
 
 DEFAULTS = {
-    "discord_token": "",
-    "target_user_id": "",   # empty = auto-follow disabled, use manual join/leave
+    "output_device_id": "",
+    "output_device_name": "",
+    "monitor_enabled": True,
+    "monitor_device_id": "",
+    "monitor_device_name": "",
     "tts_voice": "uk-UA-OstapNeural",
     "tts_rate": 0,
     "flask_port": 5000,
@@ -33,10 +28,6 @@ def _seed_from_env() -> dict:
         pass
 
     seeded = {}
-    if os.environ.get("DISCORD_TOKEN"):
-        seeded["discord_token"] = os.environ["DISCORD_TOKEN"]
-    if os.environ.get("TARGET_USER_ID"):
-        seeded["target_user_id"] = os.environ["TARGET_USER_ID"]
     if os.environ.get("TTS_VOICE"):
         seeded["tts_voice"] = os.environ["TTS_VOICE"]
     if os.environ.get("FLASK_PORT"):
@@ -48,8 +39,10 @@ def _seed_from_env() -> dict:
 
 
 def _write(data: dict):
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+    temporary = CONFIG_PATH + ".tmp"
+    with open(temporary, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+    os.replace(temporary, CONFIG_PATH)
 
 
 def load() -> dict:
@@ -68,6 +61,8 @@ def load() -> dict:
 
         merged = dict(DEFAULTS)
         merged.update({k: v for k, v in raw.items() if k in DEFAULTS})
+        if merged != raw:
+            _write(merged)  # Also discard legacy bot credentials.
         return merged
 
 

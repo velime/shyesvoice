@@ -1,8 +1,13 @@
 export interface SystemStatus {
-  botStatus: 'online' | 'offline';
-  botUsername: string;
-  voiceStatus: 'connected' | 'disconnected';
-  voiceChannelId: string | null;
+  engineStatus: 'online' | 'offline';
+  outputStatus: 'ready' | 'unavailable';
+  outputDeviceId: string;
+  outputDeviceName: string;
+  playbackStatus: 'idle' | 'generating' | 'playing';
+  activeDeviceId: string;
+  error: string;
+  errorId: number;
+  completedCount: number;
   queueSize: number;
   lastMessage: string;
 }
@@ -19,13 +24,15 @@ export interface ApiResponse<T = void> {
   error?: string;
 }
 
-export interface BotConfig {
+export interface TTSConfig {
   configured: boolean;
-  discordToken: string;
-  targetUserId: string;
+  outputDeviceId: string;
+  outputDeviceName: string;
+  monitorEnabled: boolean;
+  monitorDeviceId: string;
+  monitorDeviceName: string;
   ttsVoice: string;
   ttsRate: number;
-  inviteUrl: string | null;
 }
 
 export interface VoiceOption {
@@ -34,9 +41,9 @@ export interface VoiceOption {
   gender: string;
 }
 
-export interface VoiceChannelOption {
+export interface OutputDevice {
   id: string;
   name: string;
-  guildId: string;
-  guildName: string;
+  kind?: 'soundpad';
+  available?: boolean;
 }

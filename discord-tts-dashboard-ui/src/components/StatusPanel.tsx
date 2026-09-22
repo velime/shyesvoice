@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { SystemStatus } from '../types';
-import { Bot, Wifi, WifiOff, MessageSquare, List } from './icons';
+import { Volume2, Wifi, WifiOff, MessageSquare, List } from './icons';
 
 interface Props {
   status: SystemStatus;
@@ -25,22 +25,22 @@ function PulsingDot({ active }: { active: boolean }) {
 export function StatusPanel({ status, isLoading }: Props) {
   const items = [
     {
-      icon: <Bot size={15} />,
-      label: 'Bot Status',
-      value: status.botStatus === 'online' ? 'Online' : 'Offline',
-      active: status.botStatus === 'online',
+      icon: <Volume2 size={15} />,
+      label: 'TTS Engine',
+      value: status.engineStatus === 'online' ? 'Online' : 'Offline',
+      active: status.engineStatus === 'online',
       color:
-        status.botStatus === 'online'
+        status.engineStatus === 'online'
           ? 'text-emerald-400'
           : 'text-red-400',
     },
     {
-      icon: status.voiceStatus === 'connected' ? <Wifi size={15} /> : <WifiOff size={15} />,
-      label: 'Voice Channel',
-      value: status.voiceStatus === 'connected' ? 'Connected' : 'Disconnected',
-      active: status.voiceStatus === 'connected',
+      icon: status.outputStatus === 'ready' ? <Wifi size={15} /> : <WifiOff size={15} />,
+      label: 'Playback Target',
+      value: status.outputStatus === 'ready' ? (status.playbackStatus === 'idle' ? 'Ready' : status.playbackStatus === 'generating' ? 'Generating' : 'Playing') : 'Unavailable',
+      active: status.outputStatus === 'ready',
       color:
-        status.voiceStatus === 'connected'
+        status.outputStatus === 'ready'
           ? 'text-sky-400'
           : 'text-slate-400',
     },
@@ -161,6 +161,10 @@ export function StatusPanel({ status, isLoading }: Props) {
           ))}
         </div>
       </div>
+
+      {status.error && (
+        <p role="alert" className="text-xs text-red-300 bg-red-500/10 border border-red-500/20 rounded-xl p-3 break-words">{status.error}</p>
+      )}
 
       {/* Last message */}
       <div className="space-y-2">

@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ttsApi } from '../api/ttsApi';
-import { BotConfig } from '../types';
+import { TTSConfig } from '../types';
 
-const EMPTY_CONFIG: BotConfig = {
+const EMPTY_CONFIG: TTSConfig = {
   configured: false,
-  discordToken: '',
-  targetUserId: '',
+  outputDeviceId: '',
+  outputDeviceName: '',
+  monitorEnabled: true,
+  monitorDeviceId: '',
+  monitorDeviceName: '',
   ttsVoice: 'uk-UA-OstapNeural',
   ttsRate: 0,
-  inviteUrl: null,
 };
 
 interface UseConfigOptions {
@@ -16,7 +18,7 @@ interface UseConfigOptions {
 }
 
 export function useConfig({ onError }: UseConfigOptions = {}) {
-  const [config, setConfig] = useState<BotConfig>(EMPTY_CONFIG);
+  const [config, setConfig] = useState<TTSConfig>(EMPTY_CONFIG);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -35,8 +37,9 @@ export function useConfig({ onError }: UseConfigOptions = {}) {
 
   const save = useCallback(
     async (patch: Partial<{
-      discordToken: string;
-      targetUserId: string;
+      outputDeviceId: string;
+      monitorEnabled: boolean;
+      monitorDeviceId: string;
       ttsVoice: string;
       ttsRate: number;
     }>) => {

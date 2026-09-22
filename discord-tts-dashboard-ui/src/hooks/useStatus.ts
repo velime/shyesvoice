@@ -3,10 +3,15 @@ import { ttsApi } from '../api/ttsApi';
 import { SystemStatus } from '../types';
 
 const MOCK_STATUS: SystemStatus = {
-  botStatus: 'offline',
-  botUsername: '',
-  voiceStatus: 'disconnected',
-  voiceChannelId: null,
+  engineStatus: 'offline',
+  outputStatus: 'unavailable',
+  outputDeviceId: '',
+  outputDeviceName: '',
+  playbackStatus: 'idle',
+  activeDeviceId: '',
+  error: '',
+  errorId: 0,
+  completedCount: 0,
   queueSize: 0,
   lastMessage: '',
 };
@@ -18,16 +23,9 @@ export function useStatus(pollInterval = 5000) {
   const fetchStatus = useCallback(async () => {
     const result = await ttsApi.getStatus();
     if (result.success && result.data) {
-      setStatus({
-        botStatus: result.data.botStatus,
-        botUsername: result.data.botUsername,
-        voiceStatus: result.data.voiceStatus,
-        voiceChannelId: result.data.voiceChannelId,
-        queueSize: result.data.queueSize,
-        lastMessage: result.data.lastMessage,
-      });
+      setStatus(result.data);
     } else {
-      // Use mock/last known status on failure
+      setStatus(previous => ({ ...previous, engineStatus: 'offline', error: result.error ?? 'API unavailable' }));
     }
     setIsLoading(false);
   }, []);

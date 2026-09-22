@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { BackgroundOrbs } from './components/BackgroundOrbs';
 import { Header } from './components/Header';
@@ -7,13 +7,12 @@ import { ControlsPanel } from './components/ControlsPanel';
 import { StatusPanel } from './components/StatusPanel';
 import { ToastContainer } from './components/ToastContainer';
 import { ActivityFeed, Activity } from './components/ActivityFeed';
-import { ChannelsPanel } from './components/ChannelsPanel';
+import { OutputDevicePanel } from './components/OutputDevicePanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import { useStatus } from './hooks/useStatus';
 import { useTTS } from './hooks/useTTS';
 import { useToast } from './hooks/useToast';
 import { useConfig } from './hooks/useConfig';
-import { useChannels } from './hooks/useChannels';
 
 let activityCounter = 0;
 
@@ -24,7 +23,7 @@ export default function App() {
   const [hasAutoRedirected, setHasAutoRedirected] = useState(false);
 
   const { toasts, addToast, removeToast } = useToast();
-  const { status, isLoading, refetch } = useStatus(5000);
+  const { status, isLoading, refetch } = useStatus(1000);
 
   const pushActivity = useCallback((type: Activity['type'], message: string) => {
     const id = `act-${++activityCounter}`;
@@ -60,23 +59,15 @@ export default function App() {
     onError: handleError,
   });
 
-  const { config, isLoading: isConfigLoading, isSaving, save: saveConfig } = useConfig({ onError: handleError });
+  const { config, isLoading: isConfigLoading, isSaving, save: saveConfig, refetch: refetchConfig } = useConfig({ onError: handleError });
 
-  const {
-    channels,
-    isLoading: channelsLoading,
-    pendingId,
-    isLeaving,
-    refetch: refetchChannels,
-    join: joinChannel,
-    leave: leaveChannel,
-  } = useChannels({
-    onError: handleError,
-    onSuccess: (msg) => {
-      addToast('success', msg);
-      refetch();
-    },
-  });
+  const lastErrorId = useRef(0);
+  useEffect(() => {
+    if (status.errorId > lastErrorId.current) {
+      lastErrorId.current = status.errorId;
+      if (status.error) handleError(status.error);
+    }
+  }, [status.errorId, status.error, handleError]);
 
   // First run: send people straight to Setup instead of a dead dashboard.
   useEffect(() => {
@@ -108,8 +99,9 @@ export default function App() {
     async (rate: number) => {
       pushActivity('rate', `Speed set to ${rate > 0 ? '+' : ''}${rate}%`);
       await setRate(rate);
+      await refetchConfig();
     },
-    [setRate, pushActivity]
+    [setRate, pushActivity, refetchConfig]
   );
 
   return (
@@ -120,8 +112,8 @@ export default function App() {
         <div className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
 
           <Header
-            isOnline={status.botStatus === 'online'}
-            botUsername={status.botUsername}
+            isOnline={status.engineStatus === 'online'}
+            outputName={status.outputDeviceName}
             onSettingsClick={() => setView((v) => (v === 'settings' ? 'dashboard' : 'settings'))}
           />
 
@@ -131,7 +123,7 @@ export default function App() {
               isSaving={isSaving}
               onSave={saveConfig}
               onBack={() => setView('dashboard')}
-              canGoBack={config.configured}
+              canGoBack={true}
               onToast={(type, message) => addToast(type, message)}
             />
           ) : (
@@ -146,6 +138,7 @@ export default function App() {
                   autoSpeak={autoSpeak}
                 />
                 <ControlsPanel
+                  initialRate={config.ttsRate}
                   onRepeat={handleRepeat}
                   onClear={handleClear}
                   onRateChange={handleRateChange}
@@ -166,17 +159,12 @@ export default function App() {
               <div className="flex flex-col gap-5">
                 <StatusPanel status={status} isLoading={isLoading} />
 
-                <ChannelsPanel
-                  channels={channels}
-                  isLoading={channelsLoading}
-                  pendingId={pendingId}
-                  isLeaving={isLeaving}
-                  currentChannelId={status.voiceChannelId}
-                  botOnline={status.botStatus === 'online'}
-                  onRefresh={refetchChannels}
-                  onJoin={joinChannel}
-                  onLeave={leaveChannel}
-                />
+                <OutputDevicePanel config={config} isSaving={isSaving}
+                  onUpdate={async (patch) => {
+                    if (await saveConfig(patch)) {
+                      handleSuccess('Playback target saved ✓');
+                    }
+                  }} />
 
                 {/* Activity feed — mobile */}
                 <div className="lg:hidden">
@@ -190,7 +178,7 @@ export default function App() {
                   transition={{ delay: 0.8 }}
                   className="text-center text-[11px] text-white/15 px-2 pb-2"
                 >
-                  Polls every 5s · TTS Control v1.0
+                  Windows Audio · TTS Control v1.1
                 </motion.p>
               </div>
             </div>

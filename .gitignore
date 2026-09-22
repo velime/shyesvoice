@@ -7,3 +7,6 @@ tts.mp3
 node_modules/
 dist/
 .idea/
+work/
+.playwright-cli/
+data/soundpad/
