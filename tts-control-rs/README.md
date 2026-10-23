@@ -14,7 +14,7 @@ Rust-версия KavaTts: egui/eframe для интерфейса, windows-rs �
 Нужен Rust (toolchain `stable-x86_64-pc-windows-gnu`) и MinGW-w64 в `PATH` по пути без пробелов (GCC не линкует из пути с пробелами).
 
 ```powershell
-cargo build --release     # targeteleasekava_tts.exe
+cargo build --release     # target\release\kava_tts.exe
 cargo test                # unit-тесты
 cargo test -- --ignored   # тест SAPI: 60 быстрых фраз с тоном +10 (беззвучно)
 ```
